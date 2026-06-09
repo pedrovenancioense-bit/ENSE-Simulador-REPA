@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador REPA - ENSE</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; color: #333; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        
+        /* Cabeçalho Institucional */
+        .header { text-align: center; border-bottom: 3px solid #1a3c61; padding-bottom: 20px; margin-bottom: 25px; }
+        .logo { max-height: 80px; margin-bottom: 15px; }
+        .header h1 { color: #1a3c61; margin: 10px 0 5px 0; font-size: 24px; }
+        .subtitle { font-size: 15px; color: #e47225; font-weight: bold; margin: 0; }
+        
+        /* Rodapé Institucional */
+        .footer { text-align: center; margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 13px; color: #555; font-weight: bold; }
+        
+        h2, h3 { color: #1a3c61; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
+        select, input, button { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        /* Estilos dos Botões */
+        button { background-color: #1a3c61; color: white; border: none; cursor: pointer; font-size: 16px; margin-top: 10px; font-weight: bold; transition: background-color 0.2s; }
+        button:hover { background-color: #112740; }
+        .btn-clear { background-color: #dc3545; }
+        .btn-clear:hover { background-color: #c82333; }
+        .btn-excel { background-color: #28a745; margin-bottom: 15px; }
+        .btn-excel:hover { background-color: #218838; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        th { background-color: #1a3c61; color: white; }
+        .results { background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px; font-size: 18px; border: 1px solid #ddd; }
+        .links-section { background: #e2f0d9; padding: 15px; border-radius: 4px; margin-top: 20px; display: none; }
+        .links-section a { color: #1a3c61; text-decoration: none; font-weight: bold; }
+        .links-section a:hover { text-decoration: underline; }
+        
+        /* Alertas de Compatibilidade */
+        .alertas-section { margin-top: 20px; }
+        .alert { padding: 15px; border-radius: 4px; margin-bottom: 10px; font-size: 15px; display: none; }
+        .alert-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        
+        .header-acoes { display: flex; justify-content: space-between; align-items: center; margin-top: 30px; }
+        .header-acoes h2 { margin: 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <div class="header">
+        <img src="logo.png" alt="Logótipo ENSE" class="logo">
+        <h1>Simulador de Potência Instalada</h1>
+        <p class="subtitle">Simulador da Potência Instalada para efeitos de avaliação da Rede de Emergência de Postos de Abastecimento (REPA)</p>
+    </div>
+    
+    <div class="form-group">
+        <label for="tipoEquipamento">Tipo de Equipamento</label>
+        <select id="tipoEquipamento" onchange="atualizarFabricantes()">
+            <option value="distribuidor">Distribuidor na Ilha</option>
+            <option value="stp">Bomba Submersível (STP)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="fabricante">Fabricante</label>
+        <select id="fabricante" onchange="atualizarModelos()"></select>
+    </div>
+
+    <div class="form-group">
+        <label for="modelo">Potência / Variante</label>
+        <select id="modelo"></select>
+    </div>
+
+    <div class="form-group">
+        <label for="quantidade">Quantidade</label>
+        <input type="number" id="quantidade" value="1" min="1">
+    </div>
+
+    <button onclick="adicionarEquipamento()">Adicionar ao Posto</button>
+
+    <div class="alertas-section">
+        <div id="alertaMixMarcas" class="alert alert-warning">
+            <strong>⚠️ Atenção (Múltiplos Distribuidores):</strong> Foram detetadas marcas diferentes de Distribuidores. Garanta que o Controlador de Pista (FCC) suporta multiprotocolo ou que os equipamentos comunicam via norma IFSF.
+        </div>
+        <div id="alertaDistStp" class="alert alert-success">
+            <strong>✅ Compatibilidade Hidráulica:</strong> A operação conjunta entre Distribuidores de Ilha e Bombas Submersíveis de marcas distintas é o standard da indústria. Não existem conflitos.
+        </div>
+    </div>
+
+    <div class="header-acoes">
+        <h2>Inventário do Posto</h2>
+        <button class="btn-excel" onclick="exportarExcel()" style="width: auto; padding: 10px 20px; margin: 0;">📊 Exportar para Excel</button>
+    </div>
+    
+    <table id="tabelaInventario">
+        <thead>
+            <tr>
+                <th>Equipamento</th>
+                <th>Fabricante</th>
+                <th>Potência Un. (kW)</th>
+                <th>Qtd</th>
+                <th>Total Parcial (kW)</th>
+            </tr>
+        </thead>
+        <tbody id="corpoTabela">
+            </tbody>
+    </table>
+
+    <div class="results">
+        <div class="form-group">
+            <label for="tensao">Tensão de Alimentação do Posto</label>
+            <select id="tensao" onchange="calcularTotais()">
+                <option value="230">Monofásico (230V)</option>
+                <option value="400">Trifásico (400V - cos φ 0.85)</option>
+            </select>
+        </div>
+        <p><strong>Potência Total Instalada:</strong> <span id="totalKw">0.00</span> kW</p>
+        <p><strong>Corrente Estimada (A):</strong> <span id="totalAmps">0.00</span> A</p>
+    </div>
+
+    <div id="seccaoLinks" class="links-section">
+        <h3>Fichas Técnicas de Referência</h3>
+        <p>Consulte a documentação oficial dos equipamentos selecionados:</p>
+        <ul id="listaLinks">
+            </ul>
+    </div>
+
+    <button class="btn-clear" onclick="limparInventario()">Limpar Inventário</button>
+
+    <div class="footer">
+        <p>Centro de Coordenação Operacional da Energia - Entidade Nacional para o Setor Energético</p>
+    </div>
+
+</div>
+
+<script>
+    const dados = {
+        distribuidor: {
+            Tokheim: [{nome: "Sucção Padrão", kw: 0.75}, {nome: "Alto Caudal", kw: 1.1}, {nome: "Caudal Ultra", kw: 2.2}, {nome: "Versão Pressão", kw: 0.25}],
+            Wayne: [{nome: "Sucção Padrão", kw: 0.75}, {nome: "Alto Caudal", kw: 1.1}, {nome: "Sistemas Duplos", kw: 2.2}, {nome: "Versão Pressão", kw: 0.25}],
+            Gilbarco: [{nome: "Sucção Padrão", kw: 0.75}, {nome: "Alto Caudal", kw: 1.1}, {nome: "Caudal Ultra", kw: 2.2}, {nome: "Versão Pressão", kw: 0.25}],
+            Petrotec: [{nome: "Sucção Padrão", kw: 0.75}, {nome: "Alto Caudal", kw: 1.1}, {nome: "Caudal Ultra (Pesados)", kw: 1.5}, {nome: "Versão Pressão", kw: 0.25}]
+        },
+        stp: {
+            "Veeder-Root (Red Jacket)": [{nome: "0.75 HP", kw: 0.55}, {nome: "1.5 HP", kw: 1.1}, {nome: "2.0 HP", kw: 1.5}, {nome: "3.0 HP", kw: 2.2}, {nome: "5.0 HP", kw: 3.7}],
+            "Franklin Electric (FE Petro)": [{nome: "0.33 HP", kw: 0.25}, {nome: "0.75 HP", kw: 0.55}, {nome: "1.5 HP", kw: 1.1}, {nome: "2.0 HP", kw: 1.5}, {nome: "3.0 HP", kw: 2.2}, {nome: "4.0 HP", kw: 3.0}, {nome: "5.0 HP", kw: 3.7}]
+        }
+    };
+
+    const linksManuais = {
+        "Tokheim": "https://tanklaabi.ee/wp-content/uploads/2024/08/QML-Model-Overview-EN-Apr-2022.pdf",
+        "Wayne": "https://gasgrup.com/wp-content/uploads/2023/11/Helix-6000-II-Data-Sheet-EN-1.pdf",
+        "Gilbarco": "https://www.scribd.com/document/824452872/Valve-SK700-SK700-2-Gilbarco",
+        "Petrotec": "https://www.petrotec.pt/produtos/distribuidores-de-combustivel.html",
+        "Veeder-Root (Red Jacket)": "https://www.veeder.com/us/sites/veeder.com.us/files/2020-10/Red%20Jacket%20Product%20Guide_NA_web_Rev_B.pdf",
+        "Franklin Electric (FE Petro)": "https://www.jfpetroparts.com/supplyimages/WF00011/ffs-0379-60-hz-1%C2%BD-hp-fixed-speed-submersible-turbine-pumps-datasheet-07-14.pdf"
+    };
+
+    let inventario = [];
+
+    function atualizarFabricantes() {
+        const tipo = document.getElementById("tipoEquipamento").value;
+        const selectFab = document.getElementById("fabricante");
+        selectFab.options.length = 0; 
+        for (let fab in dados[tipo]) {
+            selectFab.options.add(new Option(fab, fab));
+        }
+        atualizarModelos();
+    }
+
+    function atualizarModelos() {
+        const tipo = document.getElementById("tipoEquipamento").value;
+        const selectFab = document.getElementById("fabricante");
+        const fab = selectFab.value;
+        const selectMod = document.getElementById("modelo");
+        selectMod.options.length = 0; 
+        if (dados[tipo] && dados[tipo][fab]) {
+            dados[tipo][fab].forEach((mod, index) => {
+                selectMod.options.add(new Option(`${mod.nome} (${mod.kw} kW)`, index));
+            });
+        }
+    }
+
+    function adicionarEquipamento() {
+        const tipoId = document.getElementById("tipoEquipamento").value;
+        const tipoNome = tipoId === 'distribuidor' ? 'Distribuidor' : 'Bomba Submersível';
+        const fab = document.getElementById("fabricante").value;
+        const modIndex = document.getElementById("modelo").value;
+        const qtd = parseInt(document.getElementById("quantidade").value);
+        
+        if (!dados[tipoId] || !dados[tipoId][fab] || typeof modIndex === "undefined" || modIndex === "") {
+            alert("Por favor, aguarde o carregamento completo das opções antes de adicionar.");
+            return;
+        }
+
+        const mod = dados[tipoId][fab][modIndex];
+        inventario.push({ tipo: tipoNome, fab, nome: mod.nome, kw: mod.kw, qtd });
+        renderizarTabela();
+    }
+
+    function renderizarTabela() {
+        const corpo = document.getElementById("corpoTabela");
+        corpo.innerHTML = "";
+        inventario.forEach(item => {
+            corpo.innerHTML += `<tr>
+                <td>${item.tipo} (${item.nome})</td>
+                <td>${item.fab}</td>
+                <td>${item.kw.toFixed(2)}</td>
+                <td>${item.qtd}</td>
+                <td>${(item.kw * item.qtd).toFixed(2)}</td>
+            </tr>`;
+        });
+        calcularTotais();
+        atualizarLinks();
+        verificarCompatibilidade();
+    }
+
+    function calcularTotais() {
+        let totalKw = 0;
+        inventario.forEach(item => totalKw += (item.kw * item.qtd));
+        
+        const tensao = document.getElementById("tensao").value;
+        let totalAmps = 0;
+
+        if (tensao === "230") {
+            totalAmps = (totalKw * 1000) / 230;
+        } else {
+            totalAmps = (totalKw * 1000) / (400 * 1.732 * 0.85); 
+        }
+
+        document.getElementById("totalKw").innerText = totalKw.toFixed(2);
+        document.getElementById("totalAmps").innerText = totalAmps.toFixed(2);
+    }
+
+    function atualizarLinks() {
+        const seccao = document.getElementById("seccaoLinks");
+        const lista = document.getElementById("listaLinks");
+        lista.innerHTML = "";
+
+        const fabricantesPresentes = [...new Set(inventario.map(item => item.fab))];
+
+        if (fabricantesPresentes.length === 0) {
+            seccao.style.display = "none";
+            return;
+        }
+
+        seccao.style.display = "block";
+        fabricantesPresentes.forEach(fab => {
+            if (linksManuais[fab]) {
+                lista.innerHTML += `<li><a href="${linksManuais[fab]}" target="_blank">Ficha Técnica Oficial - ${fab}</a></li>`;
+            }
+        });
+    }
+
+    function verificarCompatibilidade() {
+        const alertaMixMarcas = document.getElementById("alertaMixMarcas");
+        const alertaDistStp = document.getElementById("alertaDistStp");
+        
+        alertaMixMarcas.style.display = "none";
+        alertaDistStp.style.display = "none";
+
+        const distribuidores = inventario.filter(item => item.tipo === 'Distribuidor');
+        const stps = inventario.filter(item => item.tipo === 'Bomba Submersível');
+        const marcasDistribuidores = [...new Set(distribuidores.map(item => item.fab))];
+
+        if (marcasDistribuidores.length > 1) {
+            alertaMixMarcas.style.display = "block";
+        }
+
+        if (distribuidores.length > 0 && stps.length > 0) {
+            alertaDistStp.style.display = "block";
+        }
+    }
+
+    function limparInventario() {
+        inventario = [];
+        renderizarTabela();
+    }
+
+    function exportarExcel() {
+        if (inventario.length === 0) {
+            alert("O inventário está vazio. Adicione equipamentos antes de exportar.");
+            return;
+        }
+
+        const dadosExcel = [
+            ["Levantamento Técnico - Potência Instalada"],
+            ["Simulador da Potência Instalada para efeitos de avaliação da Rede de Emergência de Postos de Abastecimento (REPA)"],
+            ["Centro de Coordenação Operacional da Energia - Entidade Nacional para o Setor Energético"],
+            [], 
+            ["Equipamento", "Fabricante", "Potência Unitária (kW)", "Quantidade", "Total Parcial (kW)"]
+        ];
+
+        inventario.forEach(item => {
+            dadosExcel.push([
+                `${item.tipo} (${item.nome})`,
+                item.fab,
+                item.kw,
+                item.qtd,
+                parseFloat((item.kw * item.qtd).toFixed(2))
+            ]);
+        });
+
+        dadosExcel.push([]); 
+        
+        const tensaoSelect = document.getElementById("tensao");
+        const tensaoNome = tensaoSelect.options[tensaoSelect.selectedIndex].text;
+        
+        dadosExcel.push(["", "", "", "Tensão de Alimentação:", tensaoNome]);
+        dadosExcel.push(["", "", "", "Potência Total Instalada (kW):", Number(document.getElementById("totalKw").innerText)]);
+        dadosExcel.push(["", "", "", "Corrente Estimada (A):", Number(document.getElementById("totalAmps").innerText)]);
+
+        const ws = XLSX.utils.aoa_to_sheet(dadosExcel);
+        
+        const wscols = [
+            {wch: 35}, 
+            {wch: 25}, 
+            {wch: 20}, 
+            {wch: 30}, 
+            {wch: 20}  
+        ];
+        ws['!cols'] = wscols;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Levantamento REPA");
+
+        const dataAtual = new Date();
+        const dataFormatada = `${dataAtual.getFullYear()}${(dataAtual.getMonth()+1).toString().padStart(2, '0')}${dataAtual.getDate().toString().padStart(2, '0')}`;
+
+        XLSX.writeFile(wb, `Levantamento_REPA_${dataFormatada}.xlsx`);
+    }
+
+    window.onload = atualizarFabricantes;
+</script>
+
+</body>
+</html>
